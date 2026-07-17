@@ -29,7 +29,7 @@ The server bridges your AI assistant to Apple Music through three layers:
 
 **Lyrics: LRCLIB → NetEase fallback** — When your AI asks for lyrics, the server tries [LRCLIB](https://lrclib.net) first (strong English coverage), then falls back to [NetEase Cloud Music](https://music.163.com) for Chinese and Asian-language songs. Both are free, no API keys required. Results are time-synced and returned with the current playback position so your AI knows which line is playing now.
 
-**Architecture** — The design was informed by [netease-cloud-music-mcp](https://github.com/luuu-h/netease-music-mcp)'s approach to lyrics retrieval. We extended it with Apple Music's native AppleScript integration and a dual-source lyrics fallback for broader language coverage.
+**Architecture** — The design was informed by [netease-music-mcp](https://github.com/luuu-h/netease-music-mcp)'s approach to lyrics retrieval. We extended it with Apple Music's native AppleScript integration and a dual-source lyrics fallback for broader language coverage.
 
 ## Requirements
 
@@ -117,7 +117,7 @@ apple-music-mcp/
 
 ## Acknowledgments
 
-Lyrics integration inspired by [luuu h's netease-cloud-music-mcp](https://github.com/luuu-h/netease-music-mcp)) — the NetEase fallback approach for Chinese lyrics coverage came from studying that project.
+Lyrics integration inspired by [luuu h's netease-music-mcp](https://github.com/luuu-h/netease-music-mcp) — the NetEase fallback approach for Chinese lyrics coverage came from studying that project.
 
 ## License
 
