@@ -1,14 +1,29 @@
-import re, subprocess, json
+import re, subprocess, json, sys, time
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("Apple Music")
+
+# Per-process cache for get_lyrics
+_lyrics_cache: dict[tuple[str, str], list[dict]] = {}
+
 
 def run_applescript(script: str) -> str:
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip())
     return result.stdout.strip()
+
+
+def http_get(url: str, headers: dict = None, timeout: int = 10) -> str | None:
+    """HTTP GET with custom headers; returns body or None on any error."""
+    try:
+        req = Request(url, headers=headers or {})
+        with urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode()
+    except Exception:
+        return None
 
 @mcp.tool()
 def get_current_track() -> dict:
@@ -52,6 +67,22 @@ end tell
         "progress_percent": progress
     }
 
+def _window_lrc(lines: list[dict], pos: float) -> list[dict] | None:
+    """Slice 8-line window around playback position."""
+    if not lines:
+        return None
+    idx = 0
+    for i, l in enumerate(lines):
+        if l["time"] <= pos:
+            idx = i
+    start = max(0, idx - 2)
+    end = min(len(lines), start + 8)
+    window = lines[start:end]
+    for cl in window:
+        cl["current"] = abs(cl["time"] - lines[idx]["time"]) < 0.1
+    return window
+
+
 @mcp.tool()
 def get_lyrics() -> dict:
     """Get the lyrics of the currently playing track in Apple Music."""
@@ -91,80 +122,76 @@ end tell
                     lines.append({"time": t_sec, "text": text})
         return lines
 
+    cache_key = (title, artist)
+
+    # Check cache
+    if cache_key in _lyrics_cache:
+        synced_lines, translated_lines = _lyrics_cache[cache_key]
+        return {
+            "title": title,
+            "artist": artist,
+            "position_seconds": pos,
+            "synced_lyrics": _window_lrc(synced_lines, pos),
+            "total_lines": len(synced_lines),
+            "translated_lyrics": _window_lrc(translated_lines, pos) if translated_lines else None,
+            "cached": True,
+        }
+
     synced_lines = []
+    translated_lines = []
 
     # 1. Try LRCLIB (good for English songs)
     try:
         url = f"https://lrclib.net/api/get?track_name={quote(title)}&artist_name={quote(artist)}"
-        result = subprocess.run(
-            ["curl", "-s", "-A", "apple-music-mcp/1.0", "--max-time", "15", url],
-            capture_output=True, text=True, timeout=20
-        )
-        if result.returncode == 0 and result.stdout:
-            data = json.loads(result.stdout)
+        body = http_get(url, headers={"User-Agent": "apple-music-mcp/1.0"}, timeout=15)
+        if body:
+            data = json.loads(body)
             lrc = data.get("syncedLyrics") or ""
             if lrc:
                 synced_lines = parse_lrc(lrc)
     except Exception as e:
-        import sys
         print(f'LRCLIB ERROR: {type(e).__name__}: {e}', file=sys.stderr)
 
     # 2. Fallback: NetEase Cloud Music (good for Chinese songs)
     if not synced_lines:
         try:
-            # Search for the song
-            search_url = "https://music.163.com/api/search/get"
-            search_result = subprocess.run(
-                ["curl", "-s", "-G",
-                 "--data-urlencode", f"s={title} {artist}",
-                 "--data-urlencode", "type=1",
-                 "--data-urlencode", "limit=1",
-                 "-H", "Referer: https://music.163.com",
-                 "-H", "User-Agent: Mozilla/5.0",
-                 "--max-time", "10", search_url],
-                capture_output=True, text=True, timeout=15
+            qs = f"s={quote(f'{title} {artist}')}&type=1&limit=1"
+            search_body = http_get(
+                f"https://music.163.com/api/search/get?{qs}",
+                headers={"Referer": "https://music.163.com", "User-Agent": "Mozilla/5.0"},
+                timeout=10,
             )
-            if search_result.returncode == 0 and search_result.stdout:
-                search_data = json.loads(search_result.stdout)
+            if search_body:
+                search_data = json.loads(search_body)
                 songs = search_data.get("result", {}).get("songs", [])
                 if songs:
                     song_id = songs[0]["id"]
-                    # Fetch lyrics by song ID
-                    lyric_url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1"
-                    lyric_result = subprocess.run(
-                        ["curl", "-s",
-                         "-H", "Referer: https://music.163.com",
-                         "-H", "User-Agent: Mozilla/5.0",
-                         "--max-time", "10", lyric_url],
-                        capture_output=True, text=True, timeout=15
+                    lyric_body = http_get(
+                        f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1",
+                        headers={"Referer": "https://music.163.com", "User-Agent": "Mozilla/5.0"},
+                        timeout=10,
                     )
-                    if lyric_result.returncode == 0 and lyric_result.stdout:
-                        lyric_data = json.loads(lyric_result.stdout)
+                    if lyric_body:
+                        lyric_data = json.loads(lyric_body)
                         lrc = lyric_data.get("lrc", {}).get("lyric") or ""
                         if lrc:
                             synced_lines = parse_lrc(lrc)
+                        tlyric_text = lyric_data.get("tlyric", {}).get("lyric") or ""
+                        if tlyric_text:
+                            translated_lines = parse_lrc(tlyric_text)
         except Exception as e:
-            import sys
             print(f'NETEASE ERROR: {type(e).__name__}: {e}', file=sys.stderr)
 
-    current_lines = []
-    if synced_lines:
-        idx = 0
-        for i, l in enumerate(synced_lines):
-            if l["time"] <= pos:
-                idx = i
-        start = max(0, idx - 2)
-        end = min(len(synced_lines), start + 8)
-        current_lines = synced_lines[start:end]
-        for cl in current_lines:
-            cl["current"] = abs(cl["time"] - synced_lines[idx]["time"]) < 0.1
+    # Cache the result
+    _lyrics_cache[cache_key] = (synced_lines, translated_lines)
 
     return {
         "title": title,
         "artist": artist,
         "position_seconds": pos,
-        "synced_lyrics": current_lines if current_lines else None,
-        "total_lines": len(synced_lines)
+        "synced_lyrics": _window_lrc(synced_lines, pos),
+        "total_lines": len(synced_lines),
+        "translated_lyrics": _window_lrc(translated_lines, pos) if translated_lines else None,
     }
 
 @mcp.tool()
@@ -241,10 +268,16 @@ tell application "Music"
     try
         duplicate current track to source "Library"
     end try
-    delay 4
 
-    -- Find the track in library by name + artist, then copy to playlist
-    set foundTracks to (every track of library playlist 1 whose artist is tArtist and name is tName)
+    -- Poll for the track to appear in library (up to 8 seconds)
+    set foundTracks to {{}}
+    repeat 16 times
+        delay 0.5
+        set foundTracks to (every track of library playlist 1 whose artist is tArtist and name is tName)
+        if (count of foundTracks) > 0 then exit repeat
+    end repeat
+
+    -- Copy first match to playlist
     if (count of foundTracks) > 0 then
         duplicate (item 1 of foundTracks) to p
     end if
@@ -337,12 +370,9 @@ end tell
     # 2. Search iTunes/Apple Music catalog
     try:
         url = f"https://itunes.apple.com/search?term={quote(query)}&entity=song&limit=5"
-        result = subprocess.run(
-            ["curl", "-s", "-A", "apple-music-mcp/1.0", "--max-time", "10", url],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0 and result.stdout:
-            data = json.loads(result.stdout)
+        body = http_get(url, headers={"User-Agent": "apple-music-mcp/1.0"}, timeout=10)
+        if body:
+            data = json.loads(body)
             for track in data.get("results", []):
                 key = (track["trackName"].lower(), track["artistName"].lower())
                 if key not in seen:
@@ -398,12 +428,9 @@ end tell
         # Fall back to catalog search
         try:
             url = f"https://itunes.apple.com/search?term={quote(query)}&entity=song&limit=1"
-            result = subprocess.run(
-                ["curl", "-s", "-A", "apple-music-mcp/1.0", "--max-time", "10", url],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.returncode == 0 and result.stdout:
-                data = json.loads(result.stdout)
+            body = http_get(url, headers={"User-Agent": "apple-music-mcp/1.0"}, timeout=10)
+            if body:
+                data = json.loads(body)
                 tracks = data.get("results", [])
                 if tracks:
                     t = tracks[0]

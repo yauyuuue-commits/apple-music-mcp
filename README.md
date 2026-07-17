@@ -36,7 +36,6 @@ The server bridges your AI assistant to Apple Music through three layers:
 - **macOS** (uses AppleScript under the hood)
 - **Python 3.10+**
 - **Apple Music** with an active subscription or local library
-- **curl** (bundled with macOS)
 
 ## Installation
 
