@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "apple-music-mcp"
+version = "0.1.0"
+description = "MCP server for Apple Music on macOS"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.scripts]
+apple-music-mcp = "apple_music_mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/apple_music_mcp"]
