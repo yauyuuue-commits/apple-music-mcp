@@ -4,6 +4,10 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that l
 
 Built for [Claude Desktop](https://claude.ai/download) and [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). Works with any MCP-compatible client.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="Apple Music MCP demo" width="600" />
+</p>
+
 ## What It Does
 
 | Tool | Description |
@@ -16,6 +20,16 @@ Built for [Claude Desktop](https://claude.ai/download) and [Claude Code](https:/
 | `list_playlists` | List all user playlists |
 | `search_tracks` | Search library + Apple Music catalog |
 | `search_and_add` | Find a track and add it to a playlist in one call |
+
+## How It Works
+
+The server bridges your AI assistant to Apple Music through three layers:
+
+**AppleScript → Music.app** — All playback control and playlist operations go through macOS's native AppleScript interface. The server sends commands to Music.app directly — no Apple Music API keys, no web auth, no token management. If Music.app can do it, this server can do it.
+
+**Lyrics: LRCLIB → NetEase fallback** — When your AI asks for lyrics, the server tries [LRCLIB](https://lrclib.net) first (strong English coverage), then falls back to [NetEase Cloud Music](https://music.163.com) for Chinese and Asian-language songs. Both are free, no API keys required. Results are time-synced and returned with the current playback position so your AI knows which line is playing now.
+
+**Architecture** — The design was informed by [netease-cloud-music-mcp](https://github.com/luuu-h/netease-music-mcp)'s approach to lyrics retrieval. We extended it with Apple Music's native AppleScript integration and a dual-source lyrics fallback for broader language coverage.
 
 ## Requirements
 
@@ -76,9 +90,7 @@ No API keys needed. Coverage varies — some songs won't have synced lyrics on e
 
 This MCP gives your AI the raw tools. What it *does* with them is up to you.
 
-For example, we built a Tinder-style swipe card UI for music discovery — Claude listens to each song, reads the lyrics, decides if it likes it, and shows an animated card that swipes right (save) or left (skip):
-
-> *Screenshot / demo GIF placeholder — add your own!*
+For example, we built a Tinder-style swipe card UI for music discovery — Claude listens to each song, reads the lyrics, decides if it likes it, and shows an animated card that swipes right (save) or left (skip). See the [demo above](#) for what this looks like in action.
 
 The card display is not part of this MCP server. It lives in the AI's conversation as a prompt-driven behavior. If you want something similar, **design it together with your Claude** — that's half the fun. The data structure is simple: song title, artist, a lyrics snippet, and a verdict. The visual style is yours to create.
 
@@ -105,8 +117,9 @@ apple-music-mcp/
 
 ## Acknowledgments
 
-Lyrics integration inspired by [Benny Yen's netease-cloud-music-mcp](https://github.com/bennyyen/netease-cloud-music-mcp) — the NetEase fallback approach for Chinese lyrics coverage came from studying that project.
+Lyrics integration inspired by [luuu h's netease-cloud-music-mcp](https://github.com/luuu-h/netease-music-mcp)) — the NetEase fallback approach for Chinese lyrics coverage came from studying that project.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
