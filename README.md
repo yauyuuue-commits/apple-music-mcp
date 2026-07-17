@@ -1,22 +1,28 @@
-# Apple Music MCP
+# 🎵 Apple Music MCP
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets AI agents control **Apple Music** on macOS — play/pause/skip, read lyrics, manage playlists, and search for songs.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that lets AI assistants control **Apple Music** on macOS — play, pause, skip, read lyrics, manage playlists, and search the catalog.
 
-## Features
+Built for [Claude Desktop](https://claude.ai/download) and [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). Works with any MCP-compatible client.
 
-- 🎵 **Now Playing** — get current track info (title, artist, album, progress)
-- 📝 **Synced Lyrics** — fetches time-synced lyrics from LRCLIB and NetEase Cloud Music
-- ⏯️ **Playback Control** — play, pause, toggle, next, previous, stop
-- 📋 **Playlist Management** — create playlists, add tracks, list all playlists
-- 🔍 **Search** — search your library + Apple Music catalog with a single query
-- ➕ **Search & Add** — find a song and add it to a playlist in one call
+## What It Does
+
+| Tool | Description |
+|------|-------------|
+| `get_current_track` | Now playing info — title, artist, album, progress |
+| `get_lyrics` | Time-synced lyrics via LRCLIB → NetEase Cloud Music fallback |
+| `control_playback` | Play, pause, toggle, next, previous, stop |
+| `create_playlist` | Create a new playlist |
+| `add_to_playlist` | Add the current track to a playlist (works with subscription tracks) |
+| `list_playlists` | List all user playlists |
+| `search_tracks` | Search library + Apple Music catalog |
+| `search_and_add` | Find a track and add it to a playlist in one call |
 
 ## Requirements
 
-- **macOS** (uses `osascript` / AppleScript under the hood)
+- **macOS** (uses AppleScript under the hood)
 - **Python 3.10+**
-- **Apple Music.app** with an active library (some features require tracks to be in your library)
-- **curl** (bundled with macOS; used for API calls)
+- **Apple Music** with an active subscription or local library
+- **curl** (bundled with macOS)
 
 ## Installation
 
@@ -28,52 +34,60 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Usage
-
-Add the server to your MCP client configuration:
+## Setup
 
 ### Claude Desktop
 
-In `claude_desktop_config.json`:
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "apple-music": {
-      "command": "/path/to/apple-music-mcp/.venv/bin/python",
+      "command": "/ABSOLUTE/PATH/TO/apple-music-mcp/.venv/bin/python",
       "args": ["-m", "apple_music_mcp"]
     }
   }
 }
 ```
 
-### Claude Code (CLI)
+> ⚠️ Replace `/ABSOLUTE/PATH/TO/` with the actual path where you cloned the repo.
+
+### Claude Code
 
 ```bash
-claude mcp add apple-music -- .venv/bin/python -m apple_music_mcp
+claude mcp add apple-music -- /ABSOLUTE/PATH/TO/apple-music-mcp/.venv/bin/python -m apple_music_mcp
 ```
 
-## Available Tools
+### Quick Test
 
-| Tool | Description |
-|------|-------------|
-| `get_current_track` | Get info about the currently playing track |
-| `get_lyrics` | Get synced lyrics for the current track (LRCLIB → NetEase fallback) |
-| `control_playback` | Control playback: play / pause / toggle / next / previous / stop |
-| `create_playlist` | Create a new playlist |
-| `add_to_playlist` | Add the current track to a playlist (works with subscription tracks) |
-| `list_playlists` | List all user playlists |
-| `search_tracks` | Search library + Apple Music catalog (up to 5 results) |
-| `search_and_add` | Search for a track and add the first match to a playlist |
+After setup, open a new Claude conversation and say **"what song is playing?"** — if Claude returns track info from Apple Music, you're good to go.
 
-## Lyrics Sources
+## Lyrics
 
-The `get_lyrics` tool uses a two-tier fallback:
+The `get_lyrics` tool fetches time-synced lyrics with a two-tier fallback:
 
-1. **LRCLIB** — free community lyrics database, covers most English songs
-2. **NetEase Cloud Music** — covers Chinese / Asian songs not on LRCLIB
+1. **[LRCLIB](https://lrclib.net)** — community lyrics database, good English coverage
+2. **[NetEase Cloud Music](https://music.163.com)** — fills gaps for Chinese and other Asian-language songs
 
-No API keys required for either source.
+No API keys needed. Coverage varies — some songs won't have synced lyrics on either source.
+
+## Card Display (Optional & Customizable)
+
+This MCP gives your AI the raw tools. What it *does* with them is up to you.
+
+For example, we built a Tinder-style swipe card UI for music discovery — Claude listens to each song, reads the lyrics, decides if it likes it, and shows an animated card that swipes right (save) or left (skip):
+
+> *Screenshot / demo GIF placeholder — add your own!*
+
+The card display is not part of this MCP server. It lives in the AI's conversation as a prompt-driven behavior. If you want something similar, **design it together with your Claude** — that's half the fun. The data structure is simple: song title, artist, a lyrics snippet, and a verdict. The visual style is yours to create.
+
+## Known Limitations
+
+- **macOS only** — AppleScript doesn't exist on Windows or Linux
+- **Subscription tracks** — `add_to_playlist` works with subscription tracks by copying them to your library first, but there's a brief delay (~4s)
+- **Library-only search for `search_and_add`** — if a track isn't in your library, it returns the catalog match but can't add it directly. Play it first, then use `add_to_playlist`
+- **Lyrics coverage** — LRCLIB + NetEase covers most popular songs, but niche or very new tracks may not have synced lyrics available
 
 ## Project Structure
 
@@ -86,8 +100,12 @@ apple-music-mcp/
     └── apple_music_mcp/
         ├── __init__.py
         ├── __main__.py
-        └── server.py
+        └── server.py      ← all 8 tools live here
 ```
+
+## Acknowledgments
+
+Lyrics integration inspired by [Benny Yen's netease-cloud-music-mcp](https://github.com/bennyyen/netease-cloud-music-mcp) — the NetEase fallback approach for Chinese lyrics coverage came from studying that project.
 
 ## License
 
