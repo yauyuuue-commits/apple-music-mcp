@@ -5,7 +5,7 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that l
 Built for [Claude Desktop](https://claude.ai/download) and [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). Works with any MCP-compatible client.
 
 <p align="center">
-  <img src="assets/demo.gif" alt="Apple Music MCP demo" width="600" />
+  <img src="demo.gif" alt="Apple Music MCP demo" width="600" />
 </p>
 
 ## What It Does
