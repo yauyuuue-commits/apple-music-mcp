@@ -201,7 +201,16 @@ def create_playlist(name: str) -> dict:
     Args:
         name: The name of the new playlist
     """
-    script = f'tell application "Music" to make new playlist with properties {{name:"{name}"}}'
+    escaped_name = name.replace('"', '\\"')
+    check_script = f'tell application "Music" to (exists user playlist "{escaped_name}")'
+    try:
+        output = run_applescript(check_script)
+        if output == "true":
+            return {"status": "exists", "playlist": name}
+    except RuntimeError:
+        pass
+
+    script = f'tell application "Music" to make new playlist with properties {{name:"{escaped_name}"}}'
     try:
         run_applescript(script)
         return {"status": "ok", "playlist": name}
@@ -218,6 +227,7 @@ def add_to_playlist(playlist_name: str) -> dict:
     Args:
         playlist_name: The name of the playlist to add the current track to
     """
+    escaped_pl = playlist_name.replace('"', '\\"')
     script = f"""
 tell application "Music"
     if player state is stopped then
@@ -225,7 +235,7 @@ tell application "Music"
     end if
     set tName to name of current track
     set tArtist to artist of current track
-    set p to first playlist whose name is "{playlist_name}"
+    set p to first playlist whose name is "{escaped_pl}"
 
     -- Add to library first (needed for subscription tracks)
     try
@@ -235,9 +245,9 @@ tell application "Music"
 
     -- Find the track in library by name + artist, then copy to playlist
     set foundTracks to (every track of library playlist 1 whose artist is tArtist and name is tName)
-    repeat with libTrack in foundTracks
-        duplicate libTrack to p
-    end repeat
+    if (count of foundTracks) > 0 then
+        duplicate (item 1 of foundTracks) to p
+    end if
 
     if (count of foundTracks) = 0 then
         return "NOTFOUND|||" & tName & "|||" & tArtist
@@ -299,7 +309,7 @@ tell application "Music"
     repeat with t in results
         set i to i + 1
         if i > 5 then exit repeat
-        set out to out & name of t & "|||" & artist of t & "|||" & album of t & "|||"
+        set out to out & name of t & "|||" & artist of t & "|||" & album of t & linefeed
     end repeat
     return out
 end tell
